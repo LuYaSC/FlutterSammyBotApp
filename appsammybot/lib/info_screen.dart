@@ -2,6 +2,7 @@ import 'package:appsammybot/constant.dart';
 import 'package:appsammybot/widgets/my_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class InfoScreen extends StatefulWidget {
   @override
@@ -40,8 +41,8 @@ class _InfoScreenState extends State<InfoScreen> {
           children: <Widget>[
             MyHeader(
               image: "assets/icons/coronadr.svg",
-              textTop: "Get to know",
-              textBottom: "About Covid-19.",
+              textTop: "Lo que debe saber",
+              textBottom: "sobre el Covid-19.",
               offset: offset,
             ),
             Padding(
@@ -50,7 +51,7 @@ class _InfoScreenState extends State<InfoScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    "Symptoms",
+                    "Síntomas",
                     style: kTitleTextstyle,
                   ),
                   SizedBox(height: 20),
@@ -61,34 +62,36 @@ class _InfoScreenState extends State<InfoScreen> {
                       children: <Widget>[
                         SymptomCard(
                           image: "assets/images/headache.png",
-                          title: "Headache",
+                          title: "Dolor de Cabeza",
                           isActive: true,
                         ),
                         SymptomCard(
                           image: "assets/images/caugh.png",
-                          title: "Caugh",
+                          title: "Tos seca",
                         ),
                         SymptomCard(
                           image: "assets/images/fever.png",
-                          title: "Fever",
+                          title: "Fiebre",
                         ),
                       ],
                     ),
                   ),
                   SizedBox(height: 20),
-                  Text("Prevention", style: kTitleTextstyle),
+                  Text("Prevención", style: kTitleTextstyle),
                   SizedBox(height: 20),
                   PreventCard(
                     text:
-                        "Since the start of the coronavirus outbreak some places have fully embraced wearing facemasks",
+                        "Usar en todo momento barbijo, y los protectores adecuados, si saldra de su domicilio",
                     image: "assets/images/wear_mask.png",
-                    title: "Wear face mask",
+                    title: "Use Barbijo",
+                    urlVideo: 'https://www.youtube.com/watch?v=_TAEe7RLuCc',
                   ),
                   PreventCard(
                     text:
-                        "Since the start of the coronavirus outbreak some places have fully embraced wearing facemasks",
+                        "Lavarse las manos, reduce significativamente un posible contagio, es imprescindible un buen lavado de manos",
                     image: "assets/images/wash_hands.png",
-                    title: "Wash your hands",
+                    title: "Lavese las manos",
+                    urlVideo: 'https://www.youtube.com/watch?v=NMmAj1EKdVo',
                   ),
                   SizedBox(height: 50),
                 ],
@@ -105,11 +108,13 @@ class PreventCard extends StatelessWidget {
   final String image;
   final String title;
   final String text;
+  final String urlVideo;
   const PreventCard({
     Key key,
     this.image,
     this.title,
     this.text,
+    this.urlVideo
   }) : super(key: key);
 
   @override
@@ -163,9 +168,14 @@ class PreventCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Align(
-                      alignment: Alignment.topRight,
-                      child: SvgPicture.asset("assets/icons/forward.svg"),
+                    InkWell(
+                      onTap: () {
+                        _launchURL(urlVideo);
+                      },
+                      child: Align(
+                        alignment: Alignment.topRight,
+                        child: SvgPicture.asset("assets/icons/forward.svg"),
+                      ),
                     ),
                   ],
                 ),
@@ -175,6 +185,14 @@ class PreventCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  _launchURL(String url) async {
+    if (await canLaunch(url)) {
+      await launch(url);
+    } else {
+      throw 'Could not launch $url';
+    }
   }
 }
 
