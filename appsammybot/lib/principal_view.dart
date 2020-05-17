@@ -40,6 +40,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final controller = ScrollController();
   double offset = 0;
+  String barCode = '';
   QrDto dtoQr = new QrDto();
   CiDto cidto = new CiDto();
   QrResponse resultQr = new QrResponse();
@@ -448,8 +449,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future _scan() async {
     String barcode = await scanner.scan();
-    dtoQr.codigo = barcode;
-    this._getQrDates(dtoQr);
+    if (barcode.length > 15) {
+      dtoQr.codigo = barcode;
+      this._getQrDates(dtoQr);
+    } else {
+      cidto.ci = barcode;
+      this._displayBarCode(context);
+    }
   }
 
   _launchURL() async {
@@ -499,6 +505,63 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       });
     });
+  }
+
+  TextEditingController _textFieldbarController = new TextEditingController();
+
+  _displayBarCode(BuildContext context) async {
+    this._textFieldbarController.text = cidto.ci;
+    return showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text('Ingresar Datos',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.blue[900])),
+            content: SingleChildScrollView(
+              child: Padding(
+                padding: EdgeInsets.only(left: 0.0, right: 0.0, top: 0.0),
+                child: Column(
+                  children: <Widget>[
+                    TextField(
+                      controller: _textFieldbarController,
+                      maxLength: 12,
+                      decoration: InputDecoration(
+                        icon: new Icon(
+                          FontAwesome.user_circle_o,
+                          color: Colors.blue[900],
+                        ),
+                        hintText: "Cedula de identidad",
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: Colors.blue[900]),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: <Widget>[
+              new FlatButton(
+                child: new Text('Cancelar',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: Colors.red)),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+              new FlatButton(
+                child: new Text('Aceptar',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: Colors.blue[900])),
+                onPressed: () {
+                  _getCiDates(_textFieldbarController.text);
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        });
   }
 
   _displayCi(BuildContext context) async {
