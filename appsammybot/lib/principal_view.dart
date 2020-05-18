@@ -1,15 +1,21 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:appsammybot/Models/ci_dto.dart';
+import 'package:appsammybot/Models/get_data_covid_dto.dart';
+import 'package:appsammybot/Models/get_data_covid_result.dart';
 import 'package:appsammybot/Models/qr_dto.dart';
 import 'package:appsammybot/Models/qr_response.dart';
 import 'package:appsammybot/Services/queries_service.dart';
 import 'package:appsammybot/constant.dart';
 import 'package:appsammybot/widgets/counter.dart';
 import 'package:appsammybot/widgets/my_header.dart';
+import 'package:device_info/device_info.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_icons/flutter_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:get_ip/get_ip.dart';
 import 'package:location/location.dart';
 import 'package:qrscan/qrscan.dart' as scanner;
 import 'package:url_launcher/url_launcher.dart';
@@ -50,6 +56,125 @@ class _HomeScreenState extends State<HomeScreen> {
   Location location = new Location();
   PermissionStatus _permissionGranted;
   LocationData _locationData;
+  static final DeviceInfoPlugin deviceInfoPlugin = DeviceInfoPlugin();
+  Map<String, dynamic> _deviceData = <String, dynamic>{};
+  String _ip = 'Unknown';
+  GetDataCovidDto dtoQueriesCovid = new GetDataCovidDto();
+  GetDataCovidResult resultCountry = new GetDataCovidResult();
+  GetDataCovidResult resultState = new GetDataCovidResult();
+
+  List<BranchOffice> _branchOffices = BranchOffice.getBranchOffices();
+  List<DropdownMenuItem<BranchOffice>> _dropdownItemsBranchOffice;
+  BranchOffice _selectedBranchOffice;
+
+  List<DropdownMenuItem<BranchOffice>> buildDropdownMenuItemsBranchOffice(
+      List branchs) {
+    List<DropdownMenuItem<BranchOffice>> items = List();
+    for (BranchOffice branch in branchs) {
+      items.add(
+        DropdownMenuItem(
+          value: branch,
+          child: Text(branch.description),
+        ),
+      );
+    }
+    return items;
+  }
+
+  onChangeDropdownItemBranchOffice(BranchOffice selectedBranchOffice) {
+    setState(() {
+      _selectedBranchOffice = selectedBranchOffice;
+      dtoQueriesCovid.state = _selectedBranchOffice.code;
+      reconsultDates();
+    });
+  }
+
+  Future<void> _initPlatformState() async {
+    String ipAddress;
+    try {
+      ipAddress = await GetIp.ipAddress;
+    } on PlatformException {
+      ipAddress = 'Failed to get ipAddress.';
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _ip = ipAddress;
+    });
+  }
+
+  Future<void> _initPlatformStateDevice() async {
+    Map<String, dynamic> deviceData;
+
+    try {
+      if (Platform.isAndroid) {
+        deviceData = _readAndroidBuildData(await deviceInfoPlugin.androidInfo);
+      } else if (Platform.isIOS) {
+        deviceData = _readIosDeviceInfo(await deviceInfoPlugin.iosInfo);
+      }
+    } on PlatformException {
+      deviceData = <String, dynamic>{
+        'Error:': 'Failed to get platform version.'
+      };
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _deviceData = deviceData;
+    });
+  }
+
+  Map<String, dynamic> _readAndroidBuildData(AndroidDeviceInfo build) {
+    return <String, dynamic>{
+      'version.securityPatch': build.version.securityPatch,
+      'version.sdkInt': build.version.sdkInt,
+      'version.release': build.version.release,
+      'version.previewSdkInt': build.version.previewSdkInt,
+      'version.incremental': build.version.incremental,
+      'version.codename': build.version.codename,
+      'version.baseOS': build.version.baseOS,
+      'fingerprint': build.fingerprint,
+      'board': build.board,
+      'bootloader': build.bootloader,
+      'brand': build.brand,
+      'device': build.device,
+      'display': build.display,
+      'fingerprint': build.fingerprint,
+      'hardware': build.hardware,
+      'host': build.host,
+      'id': build.id,
+      'manufacturer': build.manufacturer,
+      'model': build.model,
+      'product': build.product,
+      'supported32BitAbis': build.supported32BitAbis,
+      'supported64BitAbis': build.supported64BitAbis,
+      'supportedAbis': build.supportedAbis,
+      'tags': build.tags,
+      'type': build.type,
+      'isPhysicalDevice': build.isPhysicalDevice,
+      'androidId': build.androidId,
+      'systemFeatures': build.systemFeatures,
+    };
+  }
+
+  Map<String, dynamic> _readIosDeviceInfo(IosDeviceInfo data) {
+    return <String, dynamic>{
+      'name': data.name,
+      'systemName': data.systemName,
+      'systemVersion': data.systemVersion,
+      'model': data.model,
+      'localizedModel': data.localizedModel,
+      'identifierForVendor': data.identifierForVendor,
+      'isPhysicalDevice': data.isPhysicalDevice,
+      'utsname.sysname:': data.utsname.sysname,
+      'utsname.nodename:': data.utsname.nodename,
+      'utsname.release:': data.utsname.release,
+      'utsname.version:': data.utsname.version,
+      'utsname.machine:': data.utsname.machine,
+    };
+  }
 
   Future getPermissions() async {
     _permissionGranted = await location.hasPermission();
@@ -61,10 +186,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void reconsultDates() {
+    _getDatesCovid(dtoQueriesCovid);
+  }
+
   @override
   void initState() {
     super.initState();
     getPermissions();
+    _dropdownItemsBranchOffice =
+        buildDropdownMenuItemsBranchOffice(_branchOffices);
+    _selectedBranchOffice = _dropdownItemsBranchOffice[0].value;
+    _initPlatformStateDevice();
+    _initPlatformState();
+    this.dtoQueriesCovid.country = 1;
+    this.dtoQueriesCovid.state = 1;
+    _getDatesCovid(dtoQueriesCovid);
     controller.addListener(onScroll);
   }
 
@@ -111,28 +248,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(width: 20),
                   Expanded(
                     child: DropdownButton(
-                      isExpanded: true,
-                      underline: SizedBox(),
-                      icon: SvgPicture.asset("assets/icons/dropdown.svg"),
-                      value: "La Paz",
-                      items: [
-                        'La Paz',
-                        'Santa Cruz',
-                        'Cochabamba',
-                        'Sucre',
-                        'Oruro',
-                        'Potosi',
-                        'Beni',
-                        'Tarija',
-                        'Pando'
-                      ].map<DropdownMenuItem<String>>((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value),
-                        );
-                      }).toList(),
-                      onChanged: (value) {},
-                    ),
+                        isExpanded: true,
+                        underline: SizedBox(),
+                        icon: SvgPicture.asset("assets/icons/dropdown.svg"),
+                        value: _selectedBranchOffice,
+                        items: _dropdownItemsBranchOffice,
+                        onChanged: onChangeDropdownItemBranchOffice),
                   ),
                 ],
               ),
@@ -220,7 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             SizedBox(height: 1),
                             Text(
-                              "QR",
+                              "QR / CI",
                               style: TextStyle(
                                 fontSize: 20,
                                 color: Colors.black,
@@ -323,7 +444,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: kTitleTextstyle,
                             ),
                             TextSpan(
-                              text: "La Paz 8/05/2020",
+                              text: _selectedBranchOffice.description,
                               style: TextStyle(
                                 color: kTextLightColor,
                               ),
@@ -359,17 +480,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: <Widget>[
                         Counter(
                           color: kInfectedColor,
-                          number: 208,
+                          number: resultState.totalInfecteds,
                           title: "Infectados",
                         ),
                         Counter(
                           color: kDeathColor,
-                          number: 40,
+                          number: resultState.totalWishes,
                           title: "Muertes",
                         ),
                         Counter(
                           color: kRecovercolor,
-                          number: 50,
+                          number: resultState.totalRecovered,
                           title: "Recuperados",
                         ),
                       ],
@@ -386,7 +507,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: kTitleTextstyle,
                             ),
                             TextSpan(
-                              text: "Bolivia 8/05/2020",
+                              text: "Bolivia",
                               style: TextStyle(
                                 color: kTextLightColor,
                               ),
@@ -422,17 +543,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: <Widget>[
                         Counter(
                           color: kInfectedColor,
-                          number: 2266,
+                          number: resultCountry.totalInfecteds,
                           title: "Infectados",
                         ),
                         Counter(
                           color: kDeathColor,
-                          number: 106,
+                          number: resultCountry.totalWishes,
                           title: "Muertes",
                         ),
                         Counter(
                           color: kRecovercolor,
-                          number: 237,
+                          number: resultCountry.totalRecovered,
                           title: "Recuperados",
                         ),
                       ],
@@ -466,6 +587,26 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       throw 'Could not launch $url';
     }
+  }
+
+  Future<dynamic> _getDatesCovid(GetDataCovidDto dto) async {
+    QueriesService.apiPostGetdataCovid(dto).then((dynamic response) {
+      setState(() {
+        _isFetching = false;
+        dynamic aux = response;
+        Map<String, dynamic> aux2 = jsonDecode(aux);
+        dynamic isOk = aux2["isOk"];
+        if (isOk == true) {
+          resultCountry =
+              GetDataCovidResult.fromJson(aux2['body']['totalCasesCountry']);
+          resultState =
+              GetDataCovidResult.fromJson(aux2['body']['totalCasesState']);
+        } else {
+          resultCountry = new GetDataCovidResult();
+          resultState = new GetDataCovidResult();
+        }
+      });
+    });
   }
 
   Future<dynamic> _getQrDates(QrDto dto) async {
@@ -693,6 +834,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 TextFormField(
                   enabled: false,
+                  maxLines: 3,
                   initialValue: result.descripcionAlerta,
                   decoration: InputDecoration(
                       icon: new Icon(FontAwesome.desktop),
@@ -701,7 +843,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextFormField(
                   enabled: false,
                   initialValue: result.observaciones,
-                  maxLines: 2,
+                  maxLines: 3,
                   decoration: InputDecoration(
                       icon: new Icon(FontAwesome.object_group),
                       hintStyle: TextStyle(color: Colors.grey, fontSize: 10.0)),
@@ -737,5 +879,26 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ))
         : Container();
+  }
+}
+
+class BranchOffice {
+  int code;
+  String description;
+
+  BranchOffice(this.code, this.description);
+
+  static List<BranchOffice> getBranchOffices() {
+    return <BranchOffice>[
+      BranchOffice(1, 'LA PAZ'),
+      BranchOffice(2, 'SANTA CRUZ'),
+      BranchOffice(3, 'COCHABAMBA'),
+      BranchOffice(4, 'CHUQUISACA'),
+      BranchOffice(5, 'ORURO'),
+      BranchOffice(6, 'POTOSI'),
+      BranchOffice(7, 'BENI'),
+      BranchOffice(8, 'PANDO'),
+      BranchOffice(9, 'TARIJA'),
+    ];
   }
 }
